@@ -1,0 +1,79 @@
+/* Otacoo: grid + preview for model selector (transforms litecontextmenu) */
+.litecontextmenu.otacoo-preview-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 10px;
+	overflow-x: hidden;
+	max-width: min(90vw, 720px);
+	padding: 10px;
+}
+
+.litecontextmenu.otacoo-preview-grid .comfy-context-menu-filter,
+.litecontextmenu.otacoo-preview-grid .comfy-context-menu-filter input {
+	grid-column: 1 / -1;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.litecontextmenu.otacoo-preview-grid .otacoo-preview-grid-entry {
+	word-break: break-word;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	align-items: center;
+	min-width: 0;
+	padding: 0;
+	text-align: center;
+	border-radius: 6px;
+	overflow: hidden;
+	background: var(--input-bg, #1a1a1a);
+	border: 1px solid transparent;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s;
+}
+
+.litecontextmenu.otacoo-preview-grid .otacoo-preview-grid-entry:hover {
+	background: rgba(255, 255, 255, 0.08);
+	border-color: var(--border-color, #444);
+}
+
+.litecontextmenu.otacoo-preview-grid .otacoo-preview-grid-entry::before {
+	content: "";
+	display: block;
+	width: 100%;
+	height: 160px;
+	min-height: 160px;
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	background-image: var(--otacoo-bg-image, none);
+	background-color: #333;
+}
+
+.litecontextmenu.otacoo-preview-grid .otacoo-preview-grid-entry:not([style*="--otacoo-bg-image"])::before {
+	background-color: #2a2a2a;
+}
+
+.litecontextmenu.otacoo-preview-grid .otacoo-preview-grid-entry .litemenu-entry-content,
+.litecontextmenu.otacoo-preview-grid .otacoo-preview-grid-entry .widget-content {
+	padding: 6px 4px;
+	font-size: 11px;
+	line-height: 1.3;
+	color: var(--input-text, #eee);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	width: 100%;
+}
+
+/* Fallback: if entry wraps text in a different structure */
+.litecontextmenu.otacoo-preview-grid .otacoo-preview-grid-entry {
+	text-overflow: ellipsis;
+	overflow: hidden;
+}
+
+.litecontextmenu.otacoo-preview-grid .otacoo-preview-grid-entry .litemenu-entry-content {
+	display: block;
+}
