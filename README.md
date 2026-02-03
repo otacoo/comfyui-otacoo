@@ -1,6 +1,6 @@
 # ComfyUI-Otacoo
 
-ComfyUI custom nodes for loading checkpoints and LoRAs with **model image previews** in the selector. When you open the model dropdown (classic UI), you get a grid of thumbnails instead of a plain list.
+ComfyUI custom nodes for loading checkpoints and LoRAs with **model image previews** in the selector.
 
 ## Nodes
 
