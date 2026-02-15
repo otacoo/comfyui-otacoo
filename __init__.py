@@ -62,6 +62,14 @@ def _register_routes():
                 return path
         return None
 
+    @routes.get("/otacoo/loras/names")
+    async def otacoo_loras_names(request):
+        try:
+            names = ["None"] + folder_paths.get_filename_list("loras")
+            return web.json_response(names)
+        except Exception:
+            return web.json_response(["None"])
+
     @routes.get("/otacoo/images/{model_type}")
     async def otacoo_images(request):
         model_type = request.match_info.get("model_type", "")
