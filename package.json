@@ -1,0 +1,9 @@
+{
+  "name": "comfyui-otacoo",
+  "version": "1.0.0",
+  "description": "ComfyUI custom nodes for loading checkpoints and LoRAs with model image previews in the selector.",
+  "private": true,
+  "scripts": {
+    "version": "node scripts/update-changelog.js"
+  }
+}
