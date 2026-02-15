@@ -12,7 +12,7 @@ ComfyUI custom nodes for loading checkpoints and LoRAs with **model image previe
 
 ### LoRA Loader 🔰
 
-- Apply **up to 5 LoRAs** in one node, each with its own **strength_model** and **strength_clip**.
+- Apply **any amount of LoRAs** in one node, each with its own **model strength** and **toggle**.
 - **Preview grid:** Select your model using a grid with preview images.
 
 ## Preview images
@@ -33,7 +33,7 @@ Example: for `myModel.safetensors` in `models/checkpoints/`, add `myModel.previe
 
 Go into the ComfyUI settings > pysssss > ModelInfo
 
-For Checkpoints add: `OtacooCheckpointLoader.ckpt_name.*`
+For Checkpoints add: `OtacooCheckpointLoader.ckpt_name.*`\
 For LoRAs add: `OtacooLoraLoader.lora_name.*`
 
 ## Installation
