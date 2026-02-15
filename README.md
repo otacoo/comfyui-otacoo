@@ -14,6 +14,7 @@ ComfyUI custom nodes for loading checkpoints and LoRAs with **model image previe
 
 - Apply **any amount of LoRAs** in one node, each with its own **model strength** and **toggle**.
 - **Preview grid:** Select your model using a grid with preview images.
+- **Trigger Words:** Extracts and outputs each LoRAs trigger words by reading .json or .metadata.json files.
 
 ## Preview images
 
