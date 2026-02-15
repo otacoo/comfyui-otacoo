@@ -13,6 +13,11 @@ document.head.appendChild(link);
 const CHECKPOINT_LOADER = "OtacooCheckpointLoader";
 const LORA_LOADER = "OtacooLoraLoader";
 
+const WIDGET_PATTERNS = {
+	checkpoints: { type: "checkpoints", pattern: (w) => w === "ckpt_name" },
+	loras: { type: "loras", pattern: (w) => /^lora_name_\d+$/.test(w) },
+};
+
 function getType(node) {
 	if (node?.comfyClass === CHECKPOINT_LOADER) return "checkpoints";
 	if (node?.comfyClass === LORA_LOADER) return "loras";
@@ -20,9 +25,7 @@ function getType(node) {
 }
 
 function isModelWidget(widgetName, type) {
-	if (type === "checkpoints") return widgetName === "ckpt_name";
-	if (type === "loras") return /^lora_name_\d+$/.test(widgetName);
-	return false;
+	return WIDGET_PATTERNS[type]?.pattern(widgetName) ?? false;
 }
 
 let imagesByType = { checkpoints: {}, loras: {} };
@@ -49,14 +52,13 @@ async function loadImageList(type) {
 }
 
 function positionMenu(menu) {
-	let left = app.canvas?.last_mouse?.[0] ?? 0;
-	let top = app.canvas?.last_mouse?.[1] ?? 0;
+	const [left, top] = app.canvas?.last_mouse ?? [0, 0];
 	const body = document.body.getBoundingClientRect();
 	const rect = menu.getBoundingClientRect();
-	if (body.width && left > body.width - rect.width - 10) left = body.width - rect.width - 10;
-	if (body.height && top > body.height - rect.height - 10) top = body.height - rect.height - 10;
-	menu.style.left = `${Math.max(10, left)}px`;
-	menu.style.top = `${Math.max(10, top)}px`;
+	const x = Math.max(10, body.width && left > body.width - rect.width - 10 ? body.width - rect.width - 10 : left);
+	const y = Math.max(10, body.height && top > body.height - rect.height - 10 ? body.height - rect.height - 10 : top);
+	menu.style.left = `${x}px`;
+	menu.style.top = `${y}px`;
 }
 
 function updateMenu(menu, type) {
@@ -226,21 +228,20 @@ function drawAddLoraButton(ctx, widget, node, w, posY, height) {
 }
 
 function handleAddLoraButtonMouse(widget, event, pos, node, onAddLora) {
-	const [x, y] = pos;
-	const margin = LORA_WIDGET_MARGIN;
-	const left = margin;
-	const top = widget._posY ?? 0;
-	const boxW = (widget._w ?? 400) - margin * 2;
-	const boxH = widget._height ?? 28;
-	const inside = x >= left && x < left + boxW && y >= top && y < top + boxH;
+	const bounds = [
+		LORA_WIDGET_MARGIN,
+		widget._posY ?? 0,
+		(widget._w ?? 400) - LORA_WIDGET_MARGIN * 2,
+		widget._height ?? 28,
+	];
+	const inside = hitTest(pos, bounds);
 
 	if (event.type === "pointerdown" || event.type === "mousedown") {
 		if (inside) {
 			widget._pressed = true;
 			node.setDirtyCanvas?.(true, true);
-			return true;
 		}
-		return false;
+		return inside;
 	}
 	if (event.type === "pointerup" || event.type === "mouseup") {
 		if (widget._pressed) {
@@ -249,7 +250,6 @@ function handleAddLoraButtonMouse(widget, event, pos, node, onAddLora) {
 			if (inside) onAddLora();
 			return true;
 		}
-		return false;
 	}
 	return false;
 }
@@ -288,7 +288,7 @@ function restoreLoraWidgetsFromList(node) {
 	} catch (_) {
 		return;
 	}
-	if (!Array.isArray(entries) || entries.length === 0) return;
+	if (!entries?.length) return;
 	const hasCustom = node.widgets.some((w) => /^lora_\d+_custom$/.test(w.name));
 	if (hasCustom) return;
 	entries.forEach((entry, i) => {
@@ -330,8 +330,7 @@ function openLoraPickerWithPreview(widget, hiddenCombo, node, ev) {
 			entry.className = "litemenu-entry";
 			entry.setAttribute("data-value", name);
 			entry.textContent = name === "None" ? "None" : name.length > 40 ? name.slice(0, 37) + "..." : name;
-			entry.addEventListener("click", (e) => {
-				e.stopPropagation();
+			entry.addEventListener("click", () => {
 				widget.value.lora = name;
 				if (hiddenCombo) hiddenCombo.value = name;
 				syncLoraListToWidget(node);
