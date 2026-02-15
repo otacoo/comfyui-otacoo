@@ -11,39 +11,32 @@ def get_lora_list():
 
 
 def get_trigger_words(lora_path):
-    """
-    Gets trigger words from JSON files with the same base name as the LoRA.
-    - .json: value of "activation text" .
-    - .metadata.json: value of "trainedWords" under "modelVersions".
-    """
+    """Gets trigger words from .json or .metadata.json files."""
+    def load_json(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+
     words = []
     path = Path(lora_path)
     base = path.stem
     parent = path.parent
 
-    json_path = parent / f"{base}.json"
-    if json_path.is_file():
-        try:
-            with open(json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            activation = data.get("activation text") or data.get("activation_text")
-            if isinstance(activation, str) and activation.strip():
-                words.extend(x.strip() for x in activation.split(",") if x.strip())
-        except (json.JSONDecodeError, OSError):
-            pass
+    # Try .json file
+    data = load_json(parent / f"{base}.json")
+    if data:
+        activation = data.get("activation text") or data.get("activation_text")
+        if isinstance(activation, str):
+            words.extend(x.strip() for x in activation.split(",") if x.strip())
 
-    meta_path = parent / f"{base}.metadata.json"
-    if meta_path.is_file():
-        try:
-            with open(meta_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            versions = data.get("modelVersions")
-            if isinstance(versions, list) and versions:
-                trained = versions[0].get("trainedWords") if isinstance(versions[0], dict) else None
-                if isinstance(trained, list):
-                    words.extend(str(x).strip() for x in trained if x)
-        except (json.JSONDecodeError, OSError):
-            pass
+    # Try .metadata.json file
+    data = load_json(parent / f"{base}.metadata.json")
+    if data and isinstance(data.get("modelVersions"), list) and data["modelVersions"]:
+        trained = data["modelVersions"][0].get("trainedWords", [])
+        if isinstance(trained, list):
+            words.extend(str(x).strip() for x in trained if x)
 
     return words
 
@@ -77,7 +70,7 @@ class OtacooLoraLoader:
         }
 
     RETURN_TYPES = ("MODEL", "CLIP", "STRING")
-    RETURN_NAMES = ("MODEL", "CLIP", "TRIGGER WORDS")
+    RETURN_NAMES = ("MODEL", "CLIP", "Trigger Words")
     FUNCTION = "load_lora"
     CATEGORY = "loaders"
 
@@ -91,53 +84,47 @@ class OtacooLoraLoader:
             entries = json.loads(lora_list) if isinstance(lora_list, str) else lora_list
         except (json.JSONDecodeError, TypeError):
             entries = []
+        
         if not isinstance(entries, list):
             entries = []
 
         all_trigger_words = []
 
-        for i, value in enumerate(entries):
-            if not isinstance(value, dict):
+        for entry in entries:
+            if not isinstance(entry, dict) or not entry.get("on"):
                 continue
-            if not value.get("on", False):
-                continue
-            lora_name = value.get("lora")
-            strength = value.get("strength", 1.0)
+            
+            lora_name = entry.get("lora")
             if not lora_name or lora_name == "None":
                 continue
+            
             try:
-                strength = float(strength)
+                strength = float(entry.get("strength", 1.0))
             except (ValueError, TypeError):
                 strength = 1.0
-            if strength == 0:
+            
+            if strength == 0 or model is None:
                 continue
-            if model is None:
-                continue
+
             try:
                 lora_path = folder_paths.get_full_path_or_raise("loras", lora_name)
-                lora_path_key = str(lora_path)
-                lora = self._loaded_loras.get(lora_path_key)
+                lora = self._loaded_loras.get(lora_path)
+                
                 if lora is None:
                     try:
                         result = comfy.utils.load_torch_file(lora_path, safe_load=True, return_metadata=True)
-                        if isinstance(result, tuple) and len(result) >= 2:
-                            lora = result[0]
-                        else:
-                            lora = result
+                        lora = result[0] if isinstance(result, tuple) else result
                     except TypeError:
+                        # Fallback for older comfy versions without return_metadata
                         lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
-                    self._loaded_loras[lora_path_key] = lora
+                    self._loaded_loras[lora_path] = lora
+                
                 model, clip = comfy.sd.load_lora_for_models(model, clip, lora, strength, strength)
-                words = get_trigger_words(lora_path)
-                all_trigger_words.extend(words)
+                all_trigger_words.extend(get_trigger_words(lora_path))
             except Exception as e:
                 print(f"[OtacooLoraLoader] Error loading LoRA {lora_name}: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
 
-        trigger_words_text = ", ".join(dict.fromkeys(all_trigger_words)) if all_trigger_words else ""
-        return (model, clip, trigger_words_text)
+        return (model, clip, ", ".join(dict.fromkeys(all_trigger_words)) if all_trigger_words else "")
 
 
 NODE_CLASS_MAPPINGS = {
