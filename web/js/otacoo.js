@@ -1,5 +1,5 @@
 /**
- * Otacoo: transforms ComfyUI combo list menu into a grid with preview images.
+ * Transforms ComfyUI combo list menu into a grid with preview images.
  */
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
