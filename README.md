@@ -27,11 +27,9 @@ Previews are loaded from **ComfyUI’s model folders** (same folder as the model
 `<basename>.preview.png`, `.preview.jpg`, `.preview.jpeg`, `.preview.webp`  
 `<basename>.png`, `.jpg`, `.jpeg`, `.webp`
 
-Example: for `myModel.safetensors` in `models/checkpoints/`, add `myModel.preview.png` (or `myModel.png`) in the same folder.
-
 ## Adding support for Pythongossss' View Info... feature
 
-Go into the ComfyUI settings > pysssss > ModelInfo
+Go into ComfyUI settings > pysssss > ModelInfo
 
 For Checkpoints add: `OtacooCheckpointLoader.ckpt_name.*`\
 For LoRAs add: `OtacooLoraLoader.lora_name.*`
