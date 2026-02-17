@@ -1,5 +1,5 @@
 [project]
-name = "otacoo"
+name = "comfyui-otacoo"
 description = "A set of nodes for loading checkpoints and LoRAs with model image previews. Also includes a node to set samplers & schedulers globally."
 version = "1.2.0"
 license = {file = "LICENSE"}
