@@ -10,6 +10,11 @@ ComfyUI custom nodes for loading checkpoints and LoRAs with **model image previe
 - **Optional separate VAE:** Choose “default” to use the checkpoint’s built-in VAE, or pick another VAE from your `models/vae` folder.
 - **Preview grid:** Select your model using a grid with preview images.
 
+### Unet Loader 🔰
+
+- Loads a UNet model (safetensors) just like the built-in loader.
+- **Preview grid:** Select your model using a grid with preview images.
+
 ### LoRA Loader 🔰
 
 - Apply **any amount of LoRAs** in one node, each with its own **model strength** and **toggle**.
