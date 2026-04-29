@@ -43,7 +43,7 @@ def _register_routes():
     )
 
     def _safe_name(name):
-        if not name or ".." in name or os.path.sep in name or (os.path.altsep and os.path.altsep in name):
+        if not name or ".." in name or os.path.isabs(name):
             return None
         return name
 
@@ -54,10 +54,9 @@ def _register_routes():
             return None
         if not model_path or not os.path.isfile(model_path):
             return None
-        folder = os.path.dirname(model_path)
-        base = os.path.splitext(model_name)[0]
+        base_path = os.path.splitext(model_path)[0]
         for suffix in preview_suffixes:
-            path = os.path.join(folder, base + suffix)
+            path = base_path + suffix
             if os.path.isfile(path):
                 return path
         return None
@@ -73,8 +72,6 @@ def _register_routes():
     @routes.get("/otacoo/images/{model_type}")
     async def otacoo_images(request):
         model_type = request.match_info.get("model_type", "")
-        if model_type not in ("checkpoints", "loras"):
-            return web.json_response({})
         out = {}
         try:
             names = folder_paths.get_filename_list(model_type)
@@ -91,7 +88,7 @@ def _register_routes():
     async def otacoo_preview(request):
         model_type = request.query.get("type", "")
         name = request.query.get("name", "")
-        if model_type not in ("checkpoints", "loras") or not _safe_name(name):
+        if not model_type or not _safe_name(name):
             raise web.HTTPNotFound()
         path = _find_preview_for_model(model_type, name)
         if path and os.path.isfile(path):

@@ -12,15 +12,18 @@ document.head.appendChild(link);
 
 const CHECKPOINT_LOADER = "OtacooCheckpointLoader";
 const LORA_LOADER = "OtacooLoraLoader";
+const UNET_LOADER = "OtacooUnetLoader";
 
 const WIDGET_PATTERNS = {
 	checkpoints: { type: "checkpoints", pattern: (w) => w === "ckpt_name" },
 	loras: { type: "loras", pattern: (w) => /^lora_name_\d+$/.test(w) },
+	unet: { type: "unet", pattern: (w) => w === "unet_name" },
 };
 
 function getType(node) {
 	if (node?.comfyClass === CHECKPOINT_LOADER) return "checkpoints";
 	if (node?.comfyClass === LORA_LOADER) return "loras";
+	if (node?.comfyClass === UNET_LOADER) return "unet";
 	return null;
 }
 
@@ -28,7 +31,7 @@ function isModelWidget(widgetName, type) {
 	return WIDGET_PATTERNS[type]?.pattern(widgetName) ?? false;
 }
 
-let imagesByType = { checkpoints: {}, loras: {} };
+let imagesByType = { checkpoints: {}, loras: {}, unet: {} };
 let loraNamesCache = null;
 
 async function getLoraNames() {
@@ -67,8 +70,42 @@ function updateMenu(menu, type) {
 	if (menu.classList.contains("otacoo-preview-grid") && items[0].classList.contains("otacoo-preview-grid-entry")) return;
 
 	menu.classList.add("otacoo-preview-grid");
+
 	const listContainer = items[0].parentElement;
 	if (listContainer) listContainer.classList.add("otacoo-grid-list");
+
+	// Add filter if missing, otherwise update placeholder
+	let filterWrap = menu.querySelector(".comfy-context-menu-filter");
+	let filterInput = filterWrap ? filterWrap.querySelector("input") : null;
+	if (!filterWrap) {
+		filterWrap = document.createElement("div");
+		filterWrap.className = "comfy-context-menu-filter";
+		filterInput = document.createElement("input");
+		filterInput.type = "text";
+		filterWrap.appendChild(filterInput);
+		menu.insertBefore(filterWrap, menu.firstChild);
+
+		filterInput.addEventListener("input", () => {
+			const q = filterInput.value.toLowerCase();
+			items.forEach((item) => {
+				const value = (item.getAttribute("data-value") || item.textContent || "").toLowerCase();
+				item.style.display = value.includes(q) ? "" : "none";
+			});
+		});
+
+		filterInput.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				const visible = Array.from(items).filter(el => el.style.display !== "none");
+				if (visible.length === 1) visible[0].click();
+			} else if (e.key === "Escape") {
+				menu.remove();
+			}
+		});
+		
+		// Focus after adding (timeout helps if it was just injected)
+		setTimeout(() => filterInput.focus(), 10);
+	}
+	if (filterInput) filterInput.placeholder = "Filter...";
 
 	const rect = menu.getBoundingClientRect();
 	menu.style.maxHeight = `${Math.max(200, window.innerHeight - rect.top - 20)}px`;
@@ -89,7 +126,7 @@ function updateMenu(menu, type) {
 app.registerExtension({
 	name: "otacoo.previewGrid",
 	async init() {
-		await Promise.all([loadImageList("checkpoints"), loadImageList("loras")]);
+		await Promise.all([loadImageList("checkpoints"), loadImageList("loras"), loadImageList("unet")]);
 
 		const refreshListInNodes = app.refreshComboInNodes;
 		if (typeof refreshListInNodes === "function") {
@@ -98,6 +135,7 @@ app.registerExtension({
 				const r = await refreshListInNodes.apply(this, arguments);
 				await loadImageList("checkpoints").catch(() => {});
 				await loadImageList("loras").catch(() => {});
+				await loadImageList("unet").catch(() => {});
 				return r;
 			};
 		}
@@ -117,7 +155,6 @@ app.registerExtension({
 							: null;
 					const widgetName = overWidget?.name ?? "";
 					if (!isModelWidget(widgetName, type)) return;
-					if (!added.querySelector(".comfy-context-menu-filter")) return;
 
 					requestAnimationFrame(() => {
 						updateMenu(added, type);
