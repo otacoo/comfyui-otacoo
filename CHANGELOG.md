@@ -1,3 +1,7 @@
+## [1.3.0] - 2026-04-29
+
+- Add a Unet Loader node
+
 ## [1.2.0] - 2026-02-15
 
 - Add Global Sampler node
