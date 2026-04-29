@@ -67,6 +67,13 @@ function positionMenu(menu) {
 function updateMenu(menu, type) {
 	const items = menu.querySelectorAll(".litemenu-entry");
 	if (!items.length) return;
+
+	if (menu.querySelector(".litemenu-title") || menu.querySelector(".has_submenu")) return;
+	
+	// Failsafe for context menus that don't have titles but have typical node actions
+	const firstItemText = (items[0].textContent || "").trim();
+	if (firstItemText.includes("Add GetNode") || firstItemText.includes("Rename Widget") || firstItemText === "Properties") return;
+
 	if (menu.classList.contains("otacoo-preview-grid") && items[0].classList.contains("otacoo-preview-grid-entry")) return;
 
 	menu.classList.add("otacoo-preview-grid");
