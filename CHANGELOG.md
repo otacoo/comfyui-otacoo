@@ -1,3 +1,7 @@
+## [1.3.1] - 2026-04-29
+
+- Fix an issue where the right-click menu was being intercepted for the checkpoint loader and being shown as preview entries
+
 ## [1.3.0] - 2026-04-29
 
 - Add a Unet Loader node
