@@ -3,7 +3,9 @@
  */
 import { app } from "../../../scripts/app.js";
 
-let globalSamplerNode = null;
+function getGlobalSamplerNode() {
+	return (app.graph?._nodes || []).find((node) => node.comfyClass === "OtacooGlobalSampler") || null;
+}
 
 app.registerExtension({
 	name: "otacoo.global",
@@ -12,21 +14,16 @@ app.registerExtension({
 		// Intercept queuePrompt to apply global sampler before execution
 		const origQueuePrompt = app.queuePrompt.bind(app);
 		app.queuePrompt = async function() {
+			const globalSamplerNode = getGlobalSamplerNode();
 			if (globalSamplerNode) {
-				applyGlobalSampler();
+				applyGlobalSampler(globalSamplerNode);
 			}
 			return await origQueuePrompt();
 		};
 	},
-
-	nodeCreated(node) {
-		if (node.comfyClass === "OtacooGlobalSampler") {
-			globalSamplerNode = node;
-		}
-	},
 });
 
-function applyGlobalSampler() {
+function applyGlobalSampler(globalSamplerNode) {
 	const samplerWidget = globalSamplerNode.widgets?.find(w => w.name === "sampler_name");
 	const schedulerWidget = globalSamplerNode.widgets?.find(w => w.name === "scheduler");
 
