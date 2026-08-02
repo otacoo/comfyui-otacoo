@@ -31,6 +31,35 @@ function isModelWidget(widgetName, type) {
 	return WIDGET_PATTERNS[type]?.pattern(widgetName) ?? false;
 }
 
+function isVueNodesMode() {
+	return !!(globalThis.LiteGraph && globalThis.LiteGraph.vueNodesMode);
+}
+
+function hideWidget(widget) {
+	if (!widget) return;
+	widget.hidden = true;
+	widget.visible = false;
+	// options.hidden is only consumed by the Vue (Nodes 2.0) renderer
+	if (widget.options) widget.options.hidden = true;
+}
+
+let activeModelPickerMenu = null;
+
+function closeModelPickerMenu() {
+	if (activeModelPickerMenu) {
+		activeModelPickerMenu.remove();
+		activeModelPickerMenu = null;
+	}
+}
+
+document.addEventListener(
+	"pointerdown",
+	(e) => {
+		if (activeModelPickerMenu && !activeModelPickerMenu.contains(e.target)) closeModelPickerMenu();
+	},
+	true
+);
+
 let imagesByType = { checkpoints: {}, loras: {}, unet: {} };
 let loraNamesCache = null;
 
@@ -130,6 +159,51 @@ function updateMenu(menu, type) {
 	positionMenu(menu);
 }
 
+/** Applies the Vue-mode model pickers to any existing loader nodes missing them. */
+function ensureVueModelPickers() {
+	if (!isVueNodesMode()) return;
+	for (const node of app.graph?._nodes ?? []) {
+		if (node.comfyClass === CHECKPOINT_LOADER) addModelPickerWidget(node, "ckpt_name", "checkpoints");
+		else if (node.comfyClass === UNET_LOADER) addModelPickerWidget(node, "unet_name", "unet");
+	}
+}
+
+/** Removes the Vue-mode picker and restores the native combo widget. */
+function restoreModelPicker(node, comboName, type) {
+	const picker = node.widgets.find((w) => w.name === `otacoo_model_picker_${type}`);
+	if (picker) {
+		const idx = node.widgets.indexOf(picker);
+		if (idx >= 0) node.widgets.splice(idx, 1);
+	}
+	const comboWidget = node.widgets.find((w) => w.name === comboName);
+	if (comboWidget) {
+		comboWidget.hidden = false;
+		comboWidget.visible = true;
+		if (comboWidget.options) delete comboWidget.options.hidden;
+	}
+	node.setDirtyCanvas?.(true, true);
+}
+
+/** Reverts loader nodes to their native combos (used when Vue mode is disabled). */
+function restoreVueModelPickers() {
+	if (isVueNodesMode()) return;
+	closeModelPickerMenu();
+	for (const node of app.graph?._nodes ?? []) {
+		if (node.comfyClass === CHECKPOINT_LOADER) restoreModelPicker(node, "ckpt_name", "checkpoints");
+		else if (node.comfyClass === UNET_LOADER) restoreModelPicker(node, "unet_name", "unet");
+	}
+}
+
+// Nodes created before Vue mode is toggled on never get nodeCreated again, so
+// watch for the mode switch and fix up loaders when it becomes active.
+let vueNodesModeWasActive = !!isVueNodesMode();
+setInterval(() => {
+	const active = !!isVueNodesMode();
+	if (active && !vueNodesModeWasActive) ensureVueModelPickers();
+	else if (!active && vueNodesModeWasActive) restoreVueModelPickers();
+	vueNodesModeWasActive = active;
+}, 1000);
+
 app.registerExtension({
 	name: "otacoo.previewGrid",
 	async init() {
@@ -172,18 +246,29 @@ app.registerExtension({
 		});
 
 		mutationObserver.observe(document.body, { childList: true, subtree: false });
+
+		// Cover nodes created/loaded before Vue mode was enabled
+		ensureVueModelPickers();
 	},
 
 	nodeCreated(node) {
-		if (node.comfyClass !== LORA_LOADER) return;
+		if (node.comfyClass !== LORA_LOADER) {
+			// Nodes 2.0 (Vue mode): combo widgets are native dropdowns, so the
+			// litecontextmenu preview grid never opens. Replace them with our own
+			// picker widget that opens the same preview grid manually.
+			if (isVueNodesMode()) {
+				if (node.comfyClass === CHECKPOINT_LOADER) addModelPickerWidget(node, "ckpt_name", "checkpoints");
+				else if (node.comfyClass === UNET_LOADER) addModelPickerWidget(node, "unet_name", "unet");
+			}
+			return;
+		}
 
 		node.serialize_widgets = true;
 		node.loraWidgetCounter = 0;
 
 		const loraListWidget = node.widgets.find((w) => w.name === "lora_list");
 		if (loraListWidget) {
-			loraListWidget.hidden = true;
-			loraListWidget.visible = false;
+			hideWidget(loraListWidget);
 			if (loraListWidget.value === undefined || loraListWidget.value === null) loraListWidget.value = "[]";
 		}
 
@@ -225,6 +310,11 @@ app.registerExtension({
 		requestAnimationFrame(() => {
 			restoreLoraWidgetsFromList(node);
 		});
+	},
+
+	afterConfigureGraph() {
+		// Workflow loads replace nodes wholesale, so re-apply pickers
+		ensureVueModelPickers();
 	},
 });
 
@@ -349,13 +439,42 @@ function restoreLoraWidgetsFromList(node) {
 	syncLoraListToWidget(node);
 }
 
-function openLoraPickerWithPreview(widget, hiddenCombo, node, ev) {
+function openModelPickerWithPreview(widget, hiddenCombo, node, ev, type, onPick) {
 	const clientX = ev?.clientX ?? window.innerWidth / 2 - 250;
 	const clientY = ev?.clientY ?? 150;
 	if (app.canvas) app.canvas.last_mouse = [clientX, clientY];
 
-	getLoraNames().then((names) => {
+	const getNames = async () => {
+		if (type === "loras") return getLoraNames();
+
+		// options.values can be an array, a record, or a function (KJNodes-style).
+		let values;
+		try {
+			const raw = hiddenCombo?.options?.values;
+			values = typeof raw === "function" ? raw(hiddenCombo, hiddenCombo.node) : raw;
+		} catch (_) {
+			values = undefined;
+		}
+		if (Array.isArray(values) && values.length > 0) return values;
+		if (values && typeof values === "object" && Object.keys(values).length > 0) return Object.keys(values);
+
+		const nodeClass = type === "checkpoints" ? CHECKPOINT_LOADER : type === "unet" ? UNET_LOADER : null;
+		const comboName = hiddenCombo?.name;
+		if (!nodeClass || !comboName) return [];
+		try {
+			const r = await api.fetchApi(`/object_info/${nodeClass}`);
+			const info = await r.json();
+			const def = info?.[nodeClass]?.input;
+			const spec = def?.required?.[comboName] ?? def?.optional?.[comboName];
+			return Array.isArray(spec) && Array.isArray(spec[0]) ? spec[0] : [];
+		} catch (_) {
+			return [];
+		}
+	};
+
+	getNames().then((names) => {
 		if (!names || names.length === 0) names = ["None"];
+		closeModelPickerMenu();
 		const menu = document.createElement("div");
 		menu.className = "litecontextmenu otacoo-preview-grid";
 
@@ -375,17 +494,17 @@ function openLoraPickerWithPreview(widget, hiddenCombo, node, ev) {
 			entry.setAttribute("data-value", name);
 			entry.textContent = name === "None" ? "None" : name.length > 40 ? name.slice(0, 37) + "..." : name;
 			entry.addEventListener("click", () => {
-				widget.value.lora = name;
-				if (hiddenCombo) hiddenCombo.value = name;
-				syncLoraListToWidget(node);
-				node.setDirtyCanvas(true, true);
-				menu.remove();
+				onPick(name);
+				node.setDirtyCanvas?.(true, true);
+				widget.triggerDraw?.();
+				closeModelPickerMenu();
 			});
 			listEl.appendChild(entry);
 		});
 		menu.appendChild(listEl);
+		activeModelPickerMenu = menu;
 		document.body.appendChild(menu);
-		requestAnimationFrame(() => updateMenu(menu, "loras"));
+		requestAnimationFrame(() => updateMenu(menu, type));
 		input.focus();
 		input.addEventListener("input", () => {
 			const q = input.value.toLowerCase();
@@ -393,10 +512,114 @@ function openLoraPickerWithPreview(widget, hiddenCombo, node, ev) {
 				el.style.display = el.getAttribute("data-value").toLowerCase().includes(q) ? "" : "none";
 			});
 		});
-	}).catch(() => {
-		loraNamesCache = ["None"];
-		openLoraPickerWithPreview(widget, hiddenCombo, node, ev);
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") closeModelPickerMenu();
+		});
+	}).catch((err) => {
+		console.error("[otacoo] Failed to open model picker:", err);
+		if (type === "loras") {
+			loraNamesCache = ["None"];
+			openModelPickerWithPreview(widget, hiddenCombo, node, ev, type, onPick);
+		}
 	});
+}
+
+function openLoraPickerWithPreview(widget, hiddenCombo, node, ev) {
+	openModelPickerWithPreview(widget, hiddenCombo, node, ev, "loras", (name) => {
+		widget.value.lora = name;
+		if (hiddenCombo) hiddenCombo.value = name;
+		syncLoraListToWidget(node);
+	});
+}
+
+/** Replaces a hidden combo with a custom picker widget (used in Vue/Nodes 2.0 mode). */
+function addModelPickerWidget(node, comboName, type) {
+	const comboWidget = node.widgets.find((w) => w.name === comboName);
+	if (!comboWidget) {
+		console.warn(
+			`[otacoo] No "${comboName}" widget on ${node.comfyClass}. Widgets:`,
+			node.widgets.map((w) => w.name)
+		);
+		return;
+	}
+	if (node.widgets.some((w) => w.name === `otacoo_model_picker_${type}`)) return;
+	hideWidget(comboWidget);
+
+	const picker = node.addCustomWidget({
+		name: `otacoo_model_picker_${type}`,
+		type: "custom",
+		value: comboWidget.value != null ? String(comboWidget.value) : "",
+		serialize: false,
+		draw: function (ctx, n, w, posY, height) { drawModelPicker(ctx, this, w, posY, height); },
+		mouse: function (ev, pos, n) { return handleModelPickerMouse(this, ev, pos, n, comboWidget, type); },
+	});
+	picker._combo = comboWidget;
+	picker.computeSize = function () { return [400, 30]; };
+}
+
+function drawModelPicker(ctx, widget, w, posY, height) {
+	if (!ctx) return;
+
+	widget._posY = posY;
+	widget._height = height;
+	widget._w = w;
+
+	const margin = LORA_WIDGET_MARGIN;
+	const left = margin;
+	const top = posY;
+	const boxW = w - margin * 2;
+	const boxH = height;
+	const radius = 4;
+
+	ctx.save();
+	ctx.fillStyle = "#2a2a2a";
+	ctx.strokeStyle = "#444";
+	ctx.lineWidth = 1;
+	if (ctx.roundRect) {
+		ctx.beginPath();
+		ctx.roundRect(left, top, boxW, boxH, radius);
+		ctx.fill();
+		ctx.stroke();
+	} else {
+		ctx.fillRect(left, top, boxW, boxH);
+		ctx.strokeRect(left, top, boxW, boxH);
+	}
+
+	const pad = 8;
+	const label = widget._combo ? String(widget._combo.value ?? "") : String(widget.value ?? "");
+	ctx.fillStyle = "#fff";
+	ctx.font = "13px Arial";
+	ctx.textAlign = "left";
+	ctx.textBaseline = "middle";
+	ctx.fillText(label.length > 38 ? label.slice(0, 35) + "..." : label, left + pad, top + boxH / 2, boxW - pad * 2 - 20);
+
+	ctx.fillStyle = "#aaa";
+	ctx.textAlign = "right";
+	ctx.fillText("▾", left + boxW - pad, top + boxH / 2);
+	ctx.restore();
+}
+
+function handleModelPickerMouse(widget, event, pos, node, hiddenCombo, type) {
+	try {
+		if (event.type === "pointerdown" || event.type === "mousedown") {
+			const bounds = [
+				LORA_WIDGET_MARGIN,
+				widget._posY ?? 0,
+				(widget._w ?? 400) - LORA_WIDGET_MARGIN * 2,
+				widget._height ?? 30,
+			];
+			if (hitTest(pos, bounds)) {
+				openModelPickerWithPreview(widget, hiddenCombo, node, event, type, (name) => {
+					widget.value = name;
+					if (hiddenCombo) hiddenCombo.value = name;
+				});
+				return true;
+			}
+		}
+	} catch (err) {
+		console.error("[otacoo] Model picker mouse handler failed:", err);
+	}
+	return false;
 }
 
 function addNewLoraWidget(node, index) {
@@ -408,8 +631,7 @@ function addNewLoraWidget(node, index) {
 			node.setDirtyCanvas(true, true);
 		}
 	}, { values: loraList });
-	comboWidget.hidden = true;
-	comboWidget.visible = false;
+	hideWidget(comboWidget);
 
 	const customWidget = node.addCustomWidget({
 		name: `lora_${index}_custom`,
