@@ -1,3 +1,9 @@
+## [1.3.2] - 2026-08-02
+
+- Add fallback for Nodes 2.0
+- Fix an issue where *Global Sampler* node was caching the choices and applying them to every workflow even if not present in the workflow
+- Fix for unet loader preview grid
+
 ## [1.3.1] - 2026-04-29
 
 - Fix an issue where the right-click menu was being intercepted for the checkpoint loader and being shown as preview entries
