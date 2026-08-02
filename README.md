@@ -53,5 +53,5 @@ Clone or copy into `ComfyUI/custom_nodes/`:
 
 ## Nodes 2.0
 
-Currently previews only work with **LiteGraph.**\
-**Nodes 2.0** support will be added once ComfyUI adds support for custom nodes in Vue UI.
+Currently previews somewhat work with **LiteGraph.**\
+Full **Nodes 2.0** support will be added once ComfyUI adds support for custom nodes in Vue UI.
